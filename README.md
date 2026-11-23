@@ -53,6 +53,8 @@ try {
 
 Supply absolute paths in caller-owned private directories; the output must not already exist. The PDF is written to `outputPath`, and `render` returns the selected backend and missing-font names. Each render owns a fresh native process or Node worker and private profile. Renders on one converter are serialized; cancellation and disposal wait for engine exit and cleanup. See the [Node API](packages/entry/README.md) for cancellation, errors, and resource limits.
 
+On Linux, `backend: 'auto'` remains the packaged WASM path. `backend: 'system'` is an explicit, opt-in host `soffice` path selected from `LIBREOFFICE_SOFFICE`, `/usr/bin/soffice`, `/usr/local/bin/soffice`, or `PATH`; it uses a unique private profile per conversion, bounded output validation, and process-group cancellation. It is not an automatic fallback, and callers must qualify the installed LibreOffice against their documents. Set `diagnostics: true` to receive stage timings in `RenderResult.timings` (engine discovery, input read, font scan, worker/system conversion, WASM startup, conversion, PDF read, and output write).
+
 ## What “font-friendly” means in 0.1.0
 
 - **Use available fonts.** The API discovers conventional system/user font directories, or indexes the roots supplied through `fontDirectories`. Custom roots replace the default list. `fontkit` reads font metadata and glyph coverage; selected files are passed to the engine as original font bytes.

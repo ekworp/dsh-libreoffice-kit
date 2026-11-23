@@ -44,6 +44,7 @@ const port = requireParentPort(parentPort)
 
 try {
   const { inputPath, extension, operation, options, engine, scratch, fontFaces, fontCache } = workerData as WorkerRequest
+  port.postMessage({ kind: 'phase', phase: 'worker-start' })
   const bytes = readFileSync(inputPath)
   const images = 'kind' in operation && operation.kind === 'images'
   if (images && extension === 'pdf' && new TextDecoder().decode(bytes.subarray(0, 5)) !== '%PDF-')

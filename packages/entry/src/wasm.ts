@@ -117,6 +117,7 @@ export interface WasmConversionRequest {
 export interface WasmConversionResult {
   readonly output: Uint8Array
   readonly missingFonts: string[]
+  readonly timings?: { readonly wasmStartupMs: number; readonly conversionMs: number; readonly pdfOutputReadMs: number }
 }
 
 type EmscriptenFactory = (overrides: EmscriptenModuleOverrides) => Promise<EmscriptenModule>
@@ -144,6 +145,7 @@ function requiredFontLoader(loader: FontLoader | undefined): FontLoader {
  */
 export interface WasmSession {
   readonly module: EmscriptenModule
+  readonly wasmStartupMs: number
   readonly office: number
   readonly document: number
   readonly pdf: boolean
@@ -156,6 +158,7 @@ export async function withWasmSession<T>(request: Omit<WasmConversionRequest, 'o
   use: (session: WasmSession) => Promise<T> | T): Promise<T> {
   const { engine, bytes, extension, options, document: metadata, faces } = request
   const pdf = extension === 'pdf'
+  const startupStarted = performance.now()
   let idleReady = false
   const factory = require(engine.loader) as EmscriptenFactory
   const raw = readFileSync(engine.data)
@@ -209,6 +212,7 @@ export async function withWasmSession<T>(request: Omit<WasmConversionRequest, 'o
       print() {}, printErr() {},
     })
     const instance = module
+    const wasmStartupMs = performance.now() - startupStarted
     const input = `/dsh/document.${extension}`
     if (!pdf) instance.FS.writeFile(input, bytes)
     if (pdf) {
@@ -225,7 +229,7 @@ export async function withWasmSession<T>(request: Omit<WasmConversionRequest, 'o
       document = instance.ccall('dsh_lok_document_load', 'number', ['number', 'string', 'string'], [office, `file://${input}`, 'Batch=true,EnableMacrosExecution=false'])
       if (!document) throw engineError(instance, office)
     }
-    const result = await use({ module: instance, office, document, pdf,
+    const result = await use({ module: instance, office, document, pdf, wasmStartupMs,
       get missingFonts() { return requiredFontLoader(fontLoader).missingFonts },
       async idle() {
         if (pdf) return
@@ -268,6 +272,7 @@ export async function convertWithWasm(request: WasmConversionRequest): Promise<W
     const { options } = request
     const operation = request.operation ?? { format: 'pdf', recalculate: false }
     const output = `/dsh/output.${operation.format}`
+    const conversionStarted = performance.now()
     const filterOptions = operation.format === 'pdf' ? JSON.stringify({
       ExportBookmarks: { type: 'boolean', value: 'true' }, ReduceImageResolution: { type: 'boolean', value: 'true' },
       MaxImageResolution: { type: 'long', value: String(options.maxImageResolution) },
@@ -280,8 +285,12 @@ export async function convertWithWasm(request: WasmConversionRequest): Promise<W
     const status = module.FS.stat(output)
     if (!module.FS.isFile(status.mode)) throw new ConversionError('invalid-output', 'Generated output is not a regular file.')
     if (status.size > options.maxOutputBytes) throw new ConversionError('output-too-large', 'Generated output exceeds its output byte limit.')
+    const conversionMs = performance.now() - conversionStarted
+    const outputReadStarted = performance.now()
     const result = module.FS.readFile(output)
+    const pdfOutputReadMs = performance.now() - outputReadStarted
     validateOutput(result, operation.format)
-    return { output: result, missingFonts: session.missingFonts }
+    return { output: result, missingFonts: session.missingFonts,
+      timings: { wasmStartupMs: session.wasmStartupMs, conversionMs, pdfOutputReadMs } }
   })
 }

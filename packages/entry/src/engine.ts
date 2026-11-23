@@ -1,6 +1,7 @@
 /** Resolve installed, version-matched engine packages without downloads or compilation. */
 import { createRequire } from 'node:module'
-import { readFile, stat } from 'node:fs/promises'
+import { access, readFile, stat } from 'node:fs/promises'
+import { constants } from 'node:fs'
 import { lstatSync } from 'node:fs'
 import { dirname, isAbsolute, resolve, relative, sep, join } from 'node:path'
 
@@ -51,6 +52,12 @@ export interface NativeEngine extends EngineInstallation {
   readonly executable: string
 }
 
+/** A host-installed LibreOffice command-line engine, selected explicitly on Linux. */
+export interface SystemEngine {
+  readonly backend: 'system'
+  readonly executable: string
+}
+
 /** A resolved shared Node WebAssembly engine. */
 export interface WasmEngine extends EngineInstallation {
   readonly backend: 'wasm'
@@ -61,7 +68,7 @@ export interface WasmEngine extends EngineInstallation {
 }
 
 /** One resolved engine installation. */
-export type Engine = NativeEngine | WasmEngine
+export type Engine = NativeEngine | SystemEngine | WasmEngine
 
 /** Engine backend a conversion runs in. */
 export type EngineBackend = Engine['backend']
@@ -143,7 +150,7 @@ function glibcVersion(value: unknown): number[] | undefined {
  */
 export async function resolveEngine(resolvePackage: (name: string) => string = name => require.resolve(`${name}/package.json`),
   packageExists: (name: string) => boolean = installedPackageExists,
-  { platform = process.platform, arch = process.arch, report = hostReport }: EngineResolutionHost = {}): Promise<Engine> {
+  { platform = process.platform, arch = process.arch, report = hostReport }: EngineResolutionHost = {}): Promise<NativeEngine | WasmEngine> {
   const details = platform === 'linux' ? report() : {}
   const target = platformTarget(platform, arch, () => details)
   if (target !== undefined) {
@@ -179,7 +186,7 @@ async function engineAsset(root: string, value: unknown, name: string, kind: 'fi
   return path
 }
 
-async function readEngine(packageFile: string, backend: EngineBackend, target: string): Promise<Engine> {
+async function readEngine(packageFile: string, backend: 'native' | 'wasm', target: string): Promise<NativeEngine | WasmEngine> {
   const root = dirname(packageFile)
   const [pkg, manifest] = await Promise.all([
     readFile(packageFile, 'utf8').then(text => JSON.parse(text) as EngineManifest),
@@ -203,4 +210,16 @@ async function readEngine(packageFile: string, backend: EngineBackend, target: s
   const data = await engineAsset(root, engine.data, 'data', 'file')
   const metadata = await engineAsset(root, engine.metadata, 'metadata', 'file')
   return { backend, root, programDirectory, loader, wasm, data, metadata, ...glibcFloor }
+}
+
+/** Resolve an explicitly requested host soffice without making it the Linux default. */
+export async function resolveSystemEngine(): Promise<SystemEngine> {
+  if (process.platform !== 'linux') throw new Error(`System LibreOffice backend is only supported on Linux, not ${process.platform}.`)
+  const candidates = [process.env.LIBREOFFICE_SOFFICE, '/usr/bin/soffice', '/usr/local/bin/soffice', 'soffice']
+    .filter((value): value is string => typeof value === 'string' && value.length > 0)
+  for (const executable of candidates) {
+    if (!executable.includes('/')) return { backend: 'system', executable }
+    try { await access(executable, constants.X_OK); return { backend: 'system', executable } } catch { /* try the next candidate */ }
+  }
+  throw new Error('System LibreOffice executable was not found. Set LIBREOFFICE_SOFFICE or install soffice on PATH.')
 }

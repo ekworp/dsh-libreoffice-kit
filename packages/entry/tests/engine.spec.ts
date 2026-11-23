@@ -6,7 +6,7 @@ import { createRequire } from 'node:module'
 import { chmodSync, readFileSync } from 'node:fs'
 import { strToU8, unzipSync, zipSync } from 'fflate'
 import { documentFixture } from './document-fixture.ts'
-import { ENGINE_VERSIONS, ENGINE_VERSION, installedPackageExists, platformTarget, resolveEngine } from '../src/engine.ts'
+import { ENGINE_VERSIONS, ENGINE_VERSION, installedPackageExists, platformTarget, resolveEngine, resolveSystemEngine } from '../src/engine.ts'
 import { resolveOptions } from '../src/options.ts'
 import { inspectDocument } from '../src/ooxml.ts'
 
@@ -69,6 +69,12 @@ describe('engine discovery', () => {
     expect(platformTarget('darwin', 'arm64')).toBe('darwin-arm64')
     expect(platformTarget('freebsd', 'x64')).toBeUndefined()
     expect(platformTarget('linux', 'riscv64')).toBeUndefined()
+  })
+
+  it('validates explicit backend selection and discovers host soffice on Linux', async () => {
+    expect(resolveOptions({ backend: 'system' }).backend).toBe('system')
+    expect(() => resolveOptions({ backend: 'bogus' as never })).toThrow(/backend/)
+    if (process.platform === 'linux') await expect(resolveSystemEngine()).resolves.toMatchObject({ backend: 'system', executable: expect.any(String) })
   })
 
   it('finds an installed engine package on the real resolution path', () => {
@@ -389,7 +395,7 @@ describe('glibc floors', () => {
 describe('option validation', () => {
   it('rejects missing limits, timer overflow, unknown switches, and malformed lists', () => {
     expect(resolveOptions({ fontDirectories: [] }).maxImageResolution).toBe(144)
-    for (const options of [{ maxInputBytes: 0 }, { timeoutMs: 2 ** 31 }, { maxOutputBytes: NaN }, { gpu: 'webgpu' }, { backend: 'wasm' }, { fontFallbacks: [[]] }]) {
+    for (const options of [{ maxInputBytes: 0 }, { timeoutMs: 2 ** 31 }, { maxOutputBytes: NaN }, { gpu: 'webgpu' }, { backend: 'bogus' }, { fontFallbacks: [[]] }]) {
       expect(() => resolveOptions(options)).toThrow()
     }
     expect(() => resolveOptions(null as unknown as Parameters<typeof resolveOptions>[0])).toThrow(/must be an object/)

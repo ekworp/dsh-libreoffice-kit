@@ -20,7 +20,9 @@ export { CONVERSION_FORMATS } from './operations.ts'
 export type { ConversionRequest } from './operations.ts'
 export { discoverRuntime } from './runtime.ts'
 export type { RuntimeInfo } from './runtime.ts'
+import { resolveSystemEngine } from './engine.ts'
 import type { Engine, NativeEngine } from './engine.ts'
+import { runSystem } from './system.ts'
 import { FontSnapshotState } from './font-snapshot-state.ts'
 import { validateFontSnapshot } from './font-snapshot-validation.ts'
 import type { FontSubstitution } from './font-loader.ts'
@@ -32,6 +34,10 @@ export { ENGINE_VERSION, ENGINE_VERSIONS } from './engine.ts'
 
 /** Host limits used by both native and Node WASM conversions. All byte limits are positive safe integers. */
 export interface ConverterOptions {
+  /** Engine selection. `auto` preserves platform package resolution; `system` explicitly uses host soffice on Linux. */
+  backend?: 'auto' | 'wasm' | 'native' | 'system'
+  /** Include per-stage performance timings in each render result. */
+  diagnostics?: boolean
   /** User-local font metadata cache directory. Defaults to the platform cache directory; false disables disk reuse. */
   fontMetadataCacheDirectory?: string | false
   /** Maximum persisted and reusable per-file metadata bytes. Default: 32 MiB. */
@@ -67,15 +73,27 @@ export interface ConverterOptions {
 }
 
 /** Result of one conversion. */
+export interface RenderTimings {
+  readonly engineDiscoveryMs?: number
+  readonly inputReadMs?: number
+  readonly fontScanMs?: number
+  readonly workerStartMs?: number
+  readonly wasmStartupMs?: number
+  readonly conversionMs?: number
+  readonly pdfOutputReadMs?: number
+  readonly outputWriteMs?: number
+}
+
 export interface RenderResult {
-  readonly backend: 'native' | 'wasm'
+  readonly backend: 'native' | 'wasm' | 'system'
+  readonly timings?: RenderTimings
   /** Declared OOXML families no installed font provides; binary formats return an empty list. */
   readonly missingFonts: string[]
 }
 
 /** A converter serializes document operations; cancellation and disposal await process/worker exit. */
 export interface Converter {
-  readonly backend: 'native' | 'wasm'
+  readonly backend: 'native' | 'wasm' | 'system'
   /**
    * Convert a private, caller-authorized regular Office file to a fresh exclusive PDF path.
    * The caller owns both directories and must prevent concurrent path changes.
@@ -106,7 +124,7 @@ export interface Converter {
 
 /** Factory-scoped engine and font metadata shared by concurrent converters. */
 export interface ConverterFactory {
-  readonly backend: 'native' | 'wasm'
+  readonly backend: 'native' | 'wasm' | 'system'
   /** Create one serial converter sharing this factory's bounded font cache. */
   create(): Promise<Converter>
   /** Abort and join every converter created by this factory. */
@@ -119,6 +137,7 @@ interface WasmWorkerResult {
   readonly ok: true
   readonly output: Uint8Array
   readonly missingFonts: string[]
+  readonly timings?: RenderTimings
 }
 
 interface ImagesWorkerResult { readonly kind?: undefined; readonly ok: true; readonly images: RenderImagesResult }
@@ -130,11 +149,13 @@ interface NativeWorkerResult {
   readonly fonts: string[]
   readonly substitutions: FontSubstitution[]
   readonly missingFonts: string[]
+  readonly timings?: RenderTimings
 }
 
 /** One message the conversion worker sends before it settles. */
 type WorkerMessage =
   | { readonly kind: 'font-cache'; readonly entries: FontResolutionCacheEntry[] }
+  | { readonly kind: 'phase'; readonly phase: string }
   | WasmWorkerResult
   | ImagesWorkerResult
   | NativeWorkerResult
@@ -180,8 +201,9 @@ Promise<WasmWorkerResult | NativeWorkerResult | ImagesWorkerResult> {
   worker.once('error', settled.reject)
   worker.once('exit', (code) => { settled.reject(new ConversionError('failed', `LibreOffice worker exited before returning a result (${code}).`)) })
   worker.on('message', (message: WorkerMessage) => {
-    if (message.kind === 'font-cache') onFontCache(message.entries)
-    else if (message.ok) settled.resolve(message)
+    if (message.kind === 'font-cache' || message.kind === 'phase') {
+      if (message.kind === 'font-cache') onFontCache(message.entries)
+    } else if (message.ok) settled.resolve(message)
     else settled.reject(new ConversionError(failureCode(message), message.error))
   })
   try {
@@ -234,14 +256,22 @@ function defaultSharedState(options: ReturnType<typeof resolveOptions>, engine: 
 async function resolveConverter(options?: ConverterOptions): Promise<{
   readonly options: ReturnType<typeof resolveOptions>
   readonly engine: Engine
+  readonly engineDiscoveryMs: number
 }> {
+  const started = performance.now()
   const resolvedOptions = resolveOptions(options)
   let engine: Engine
-  try { engine = await resolveEngine() } catch (cause) { throw new ConversionError('unavailable', (cause as Error).message, { cause }) }
-  return { options: resolvedOptions, engine }
+  try {
+    if (resolvedOptions.backend === 'system') engine = await resolveSystemEngine()
+    else engine = await resolveEngine()
+    if (resolvedOptions.backend !== 'auto' && resolvedOptions.backend !== engine.backend)
+      throw new Error(`Requested ${resolvedOptions.backend} backend is unavailable on this host.`)
+  } catch (cause) { throw new ConversionError('unavailable', (cause as Error).message, { cause }) }
+  return { options: resolvedOptions, engine, engineDiscoveryMs: performance.now() - started }
 }
 
 function createConverterWith(resolvedOptions: ReturnType<typeof resolveOptions>, engine: Engine,
+  engineDiscoveryMs = 0,
   shared: SharedConverterState, onDispose?: (converter: Converter) => void): Converter {
   const lifetime = new AbortController()
   const active = new Set<Promise<RenderResult | RenderImagesResult>>()
@@ -298,37 +328,60 @@ function createConverterWith(resolvedOptions: ReturnType<typeof resolveOptions>,
     let output: FileHandle | undefined
     let succeeded = false
     let failure: unknown
+    const timings: { -readonly [K in keyof RenderTimings]?: number } = resolvedOptions.diagnostics ? { engineDiscoveryMs } : {}
     try {
       stopped.throwIfAborted()
       output = await open(request.outputPath, 'wx', 0o600)
+      const inputStarted = performance.now()
       const sourceBytes = await readBounded(request.inputPath, resolvedOptions.maxInputBytes, stopped, 'input')
+      timings.inputReadMs = performance.now() - inputStarted
       scratch = await mkdtemp(join(tmpdir(), 'libreoffice-kit-'))
       const inputPath = join(scratch, `document.${extension}`)
       const input = await open(inputPath, 'wx', 0o600)
       try { await input.writeFile(sourceBytes) } finally { await input.close() }
+      const fontScanStarted = performance.now()
       const fonts = await snapshot(stopped)
-      const result = await runWorker({ inputPath, extension, operation: request, options: resolvedOptions, engine, scratch,
-        fontFaces: fonts.faces, fontCache: [...shared.fontCache.values()] }, stopped,
-      entries => mergeCache(fonts.generation, entries))
-      if ('images' in result) throw new ConversionError('failed', 'Conversion worker returned an image batch for an export request.')
+      timings.fontScanMs = performance.now() - fontScanStarted
       let bytes: Uint8Array
-      if ('output' in result) bytes = result.output
-      else {
-        // The worker answers with font imports for the engine the converter resolved.
-        const native = engine as NativeEngine
+      let missingFonts: string[] = []
+      if (engine.backend === 'system') {
         const profile = join(scratch, 'profile')
-        await mkdir(profile, { mode: 0o700 })
         const path = join(scratch, `output.${format}`)
-        await runNative(native, resolvedOptions, inputPath, path, profile, result.fonts, result.substitutions, stopped, request)
+        const conversionStarted = performance.now()
+        await runSystem(engine, resolvedOptions, inputPath, path, profile, stopped, request)
+        timings.conversionMs = performance.now() - conversionStarted
+        const outputReadStarted = performance.now()
         bytes = await readBounded(path, resolvedOptions.maxOutputBytes, stopped, 'output')
+        timings.pdfOutputReadMs = performance.now() - outputReadStarted
+        timings.workerStartMs = 0
+      } else {
+        const workerStarted = performance.now()
+        const result = await runWorker({ inputPath, extension, operation: request, options: resolvedOptions, engine, scratch,
+          fontFaces: fonts.faces, fontCache: [...shared.fontCache.values()] }, stopped,
+        entries => mergeCache(fonts.generation, entries))
+        timings.workerStartMs = performance.now() - workerStarted
+        if ('timings' in result && result.timings !== undefined) Object.assign(timings, result.timings)
+        if ('images' in result) throw new ConversionError('failed', 'Conversion worker returned an image batch for an export request.')
+        missingFonts = result.missingFonts
+        if ('output' in result) bytes = result.output
+        else {
+          const native = engine as NativeEngine
+          const profile = join(scratch, 'profile')
+          await mkdir(profile, { mode: 0o700 })
+          const path = join(scratch, `output.${format}`)
+          await runNative(native, resolvedOptions, inputPath, path, profile, result.fonts, result.substitutions, stopped, request)
+          bytes = await readBounded(path, resolvedOptions.maxOutputBytes, stopped, 'output')
+        }
       }
       validateOutput(bytes, format)
       await validateFontSnapshot(fonts)
       stopped.throwIfAborted()
+      const outputWriteStarted = performance.now()
       await output.writeFile(bytes)
+      timings.outputWriteMs = performance.now() - outputWriteStarted
       stopped.throwIfAborted()
       succeeded = true
-      return { backend: engine.backend, missingFonts: result.missingFonts }
+      return { backend: engine.backend, missingFonts, ...(resolvedOptions.diagnostics ? { timings } : {}) }
     } catch (error) {
       failure = error
       throw error
@@ -429,7 +482,7 @@ function createConverterWith(resolvedOptions: ReturnType<typeof resolveOptions>,
 
 /** Resolve one engine and share its bounded font state across many converters. */
 export async function createConverterFactory(options?: ConverterOptions): Promise<ConverterFactory> {
-  const { options: resolvedOptions, engine } = await resolveConverter(options)
+  const { options: resolvedOptions, engine, engineDiscoveryMs } = await resolveConverter(options)
   const shared: SharedConverterState = { snapshots: new FontSnapshotState(), generation: undefined, fontCache: new Map() }
   const converters = new Set<Converter>()
   let disposal: Promise<void> | undefined
@@ -437,7 +490,7 @@ export async function createConverterFactory(options?: ConverterOptions): Promis
     backend: engine.backend,
     async create() {
       if (disposal) throw new ConversionError('unavailable', 'LibreOffice converter factory is disposed.')
-      const converter = createConverterWith(resolvedOptions, engine, shared, value => converters.delete(value))
+      const converter = createConverterWith(resolvedOptions, engine, engineDiscoveryMs, shared, value => converters.delete(value))
       converters.add(converter)
       return converter
     },
@@ -460,6 +513,6 @@ export async function createConverterFactory(options?: ConverterOptions): Promis
 
 /** Create one converter with process-shared, configuration-isolated bounded font metadata. */
 export async function createConverter(options?: ConverterOptions): Promise<Converter> {
-  const { options: resolvedOptions, engine } = await resolveConverter(options)
-  return createConverterWith(resolvedOptions, engine, defaultSharedState(resolvedOptions, engine))
+  const { options: resolvedOptions, engine, engineDiscoveryMs } = await resolveConverter(options)
+  return createConverterWith(resolvedOptions, engine, engineDiscoveryMs, defaultSharedState(resolvedOptions, engine))
 }

@@ -28,6 +28,8 @@ export const FONT_FALLBACKS: readonly (readonly string[])[] = [
 
 /** Resolved limits and font settings used by every conversion of one converter. */
 export interface ResolvedOptions {
+  readonly backend: 'auto' | 'wasm' | 'native' | 'system'
+  readonly diagnostics: boolean
   readonly fontMetadataCacheDirectory: string | false
   readonly maxFontMetadataCacheBytes: number
   readonly timeoutMs: number
@@ -86,15 +88,19 @@ function fontGroups(value: unknown): string[][] {
 export function resolveOptions(input: ConverterOptions = {}): ResolvedOptions {
   const callerOptions: unknown = input
   if (callerOptions === null || typeof callerOptions !== 'object' || Array.isArray(callerOptions)) throw new TypeError('Converter options must be an object.')
-  const merged: Record<string, unknown> = { ...DEFAULT_LIMITS, fontDirectories: systemFontDirectories(),
+  const merged: Record<string, unknown> = { ...DEFAULT_LIMITS, backend: 'auto', diagnostics: false, fontDirectories: systemFontDirectories(),
     fontFallbacks: FONT_FALLBACKS, initialFontFamilies: [], ...input }
-  for (const key of Object.keys(input)) if (!(key in DEFAULT_LIMITS) && !(FONT_COLLECTION_NAMES as readonly string[]).includes(key) && key !== 'fontFallbacks' && key !== 'fontMetadataCacheDirectory') {
+  for (const key of Object.keys(input)) if (!(key in DEFAULT_LIMITS) && !(FONT_COLLECTION_NAMES as readonly string[]).includes(key) && key !== 'fontFallbacks' && key !== 'fontMetadataCacheDirectory' && key !== 'backend' && key !== 'diagnostics') {
     throw new TypeError(`Unknown converter option: ${key}`)
   }
   const cacheDirectory = input.fontMetadataCacheDirectory === undefined ? defaultFontMetadataCacheDirectory() : input.fontMetadataCacheDirectory
   if (cacheDirectory !== false && (typeof cacheDirectory !== 'string' || !isAbsolute(cacheDirectory) || cacheDirectory.includes('\0')))
     throw new TypeError('fontMetadataCacheDirectory must be an absolute path or false.')
+  if (!['auto', 'wasm', 'native', 'system'].includes(merged.backend as string)) throw new TypeError('backend must be auto, wasm, native, or system.')
+  if (typeof merged.diagnostics !== 'boolean') throw new TypeError('diagnostics must be a boolean.')
   return {
+    backend: merged.backend as ResolvedOptions['backend'],
+    diagnostics: merged.diagnostics,
     fontMetadataCacheDirectory: cacheDirectory,
     maxFontMetadataCacheBytes: positiveSafeInteger(merged.maxFontMetadataCacheBytes, 'maxFontMetadataCacheBytes'),
     timeoutMs: positiveSafeInteger(merged.timeoutMs, 'timeoutMs'),
