@@ -40,6 +40,8 @@ export interface ConverterOptions {
   backend?: 'auto' | 'wasm' | 'native' | 'system'
   /** Include per-stage performance timings in each render result. */
   diagnostics?: boolean
+  /** Keep an idle WASM worker alive for this many milliseconds. Default: 30000. */
+  wasmWorkerIdleMs?: number
   /** User-local font metadata cache directory. Defaults to the platform cache directory; false disables disk reuse. */
   fontMetadataCacheDirectory?: string | false
   /** Maximum persisted and reusable per-file metadata bytes. Default: 32 MiB. */
@@ -187,32 +189,61 @@ async function readBounded(path: string, limit: number, signal: AbortSignal, rol
   } finally { await file.close() }
 }
 
+interface WorkerSlot {
+  worker: Worker | undefined
+  idleTimer: ReturnType<typeof setTimeout> | undefined
+}
+
+async function stopWorker(slot: WorkerSlot): Promise<void> {
+  const worker = slot.worker
+  slot.worker = undefined
+  if (slot.idleTimer !== undefined) clearTimeout(slot.idleTimer)
+  slot.idleTimer = undefined
+  await worker?.terminate()
+}
+
 async function runWorker(data: WorkerRequest, signal: AbortSignal,
-  onFontCache: (entries: FontResolutionCacheEntry[]) => void):
+  onFontCache: (entries: FontResolutionCacheEntry[]) => void, slot?: WorkerSlot, idleMs = 30_000):
 Promise<WasmWorkerResult | NativeWorkerResult | ImagesWorkerResult> {
   signal.throwIfAborted()
-  const worker = new Worker(new URL('./worker.js', import.meta.url), {
-    workerData: data, name: 'libreoffice-conversion', execArgv: [], stdout: true, stderr: true,
+  if (slot?.idleTimer !== undefined) { clearTimeout(slot.idleTimer); slot.idleTimer = undefined }
+  const worker = slot?.worker ?? new Worker(new URL('./worker.js', import.meta.url), {
+    workerData: { ...data, ...(slot !== undefined ? { persistent: true } : {}) }, name: 'libreoffice-conversion', execArgv: [], stdout: true, stderr: true,
   })
-  // Emscripten pthread diagnostics must not enter the embedding application's stdout protocol.
+  const persistent = slot !== undefined && typeof (worker as unknown as { postMessage?: unknown }).postMessage === 'function'
+  if (persistent && slot?.worker === worker) worker.postMessage(data)
+  if (persistent) slot!.worker = worker
   worker.stdout.resume()
   worker.stderr.resume()
   const settled = Promise.withResolvers<WasmWorkerResult | NativeWorkerResult | ImagesWorkerResult>()
   const abort = (): void => { settled.reject(signal.reason) }
+  const error = (cause: unknown): void => { if (slot?.worker === worker) slot.worker = undefined; settled.reject(cause) }
+  const exit = (code: number): void => { error(new ConversionError('failed', `LibreOffice worker exited before returning a result (${code}).`)) }
+  const message = (value: WorkerMessage): void => {
+    if (value.kind === 'font-cache' || value.kind === 'phase') {
+      if (value.kind === 'font-cache') onFontCache(value.entries)
+    } else if (value.ok) settled.resolve(value)
+    else settled.reject(new ConversionError(failureCode(value), value.error))
+  }
   signal.addEventListener('abort', abort, { once: true })
-  worker.once('error', settled.reject)
-  worker.once('exit', (code) => { settled.reject(new ConversionError('failed', `LibreOffice worker exited before returning a result (${code}).`)) })
-  worker.on('message', (message: WorkerMessage) => {
-    if (message.kind === 'font-cache' || message.kind === 'phase') {
-      if (message.kind === 'font-cache') onFontCache(message.entries)
-    } else if (message.ok) settled.resolve(message)
-    else settled.reject(new ConversionError(failureCode(message), message.error))
-  })
+  worker.once('error', error)
+  worker.once('exit', exit)
+  worker.on('message', message)
+  let keep = false
   try {
-    return await settled.promise
+    const result = await settled.promise
+    keep = persistent
+    return result
   } finally {
     signal.removeEventListener('abort', abort)
-    await worker.terminate()
+    worker.removeListener('error', error)
+    worker.removeListener('exit', exit)
+    worker.removeListener('message', message)
+    if (!keep) await worker.terminate()
+    else {
+      if (slot!.idleTimer !== undefined) clearTimeout(slot!.idleTimer)
+      slot!.idleTimer = setTimeout(() => { void stopWorker(slot!) }, idleMs)
+    }
   }
 }
 
@@ -280,6 +311,7 @@ function createConverterWith(resolvedOptions: ReturnType<typeof resolveOptions>,
   const waiting = new Set<() => void>()
   let running = false
   let disposal: Promise<void> | undefined
+  const workerSlot: WorkerSlot = { worker: undefined, idleTimer: undefined }
   const mergeCache = (generation: string, entries: FontResolutionCacheEntry[]): void => {
     if (shared.generation !== generation) return
     for (const entry of entries) {
@@ -349,7 +381,7 @@ function createConverterWith(resolvedOptions: ReturnType<typeof resolveOptions>,
       if (engine.backend === 'system') {
         const preflightStarted = performance.now()
         const document = inspectDocument(sourceBytes, extension, resolvedOptions)
-        const loader = createFontLoader(resolvedOptions, document, () => '', fonts.faces, [...shared.fontCache.values()])
+        const loader = createFontLoader(resolvedOptions, document, () => '', fonts.faces, [...shared.fontCache.values()], false)
         preloadFonts(loader, resolvedOptions, document, true)
         missingFonts = loader.missingFonts
         mergeCache(fonts.generation, loader.cacheEntries)
@@ -367,7 +399,7 @@ function createConverterWith(resolvedOptions: ReturnType<typeof resolveOptions>,
         const workerStarted = performance.now()
         const result = await runWorker({ inputPath, extension, operation: request, options: resolvedOptions, engine, scratch,
           fontFaces: fonts.faces, fontCache: [...shared.fontCache.values()] }, stopped,
-        entries => mergeCache(fonts.generation, entries))
+        entries => mergeCache(fonts.generation, entries), workerSlot, resolvedOptions.wasmWorkerIdleMs)
         timings.workerStartMs = performance.now() - workerStarted
         if ('timings' in result && result.timings !== undefined) Object.assign(timings, result.timings)
         if ('images' in result) throw new ConversionError('failed', 'Conversion worker returned an image batch for an export request.')
@@ -481,6 +513,7 @@ function createConverterWith(resolvedOptions: ReturnType<typeof resolveOptions>,
       disposal ??= (async () => {
         lifetime.abort(new Error('LibreOffice converter is disposed.'))
         await Promise.allSettled(active)
+        await stopWorker(workerSlot)
         onDispose?.(converter)
       })()
       return disposal

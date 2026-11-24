@@ -39,7 +39,7 @@ const requestKey = ({ codePoints: _codePoints, ...request }: FontMatchRequest): 
 
 /** Build one operation's loader over a factory-owned immutable font snapshot. */
 export function createFontLoader(options: ResolvedOptions, document: DocumentFontMetadata, install: FontInstaller,
-  faces: readonly FontFace[], cache: readonly FontResolutionCacheEntry[] = []): FontLoader {
+  faces: readonly FontFace[], cache: readonly FontResolutionCacheEntry[] = [], readFontBytes = true): FontLoader {
   const catalog = new SystemFontCatalog({ faces, fallbackFamilies: options.fontFallbacks })
   const byFace = new Map(faces.map(face => [faceKey(face), face]))
   const matches = new Map<string, FontResolutionCacheEntry>()
@@ -105,8 +105,8 @@ export function createFontLoader(options: ResolvedOptions, document: DocumentFon
         const installed = loaded.get(face.path)
         if (installed !== undefined) return installed
         if (bytes + face.size > options.maxLoadedFontBytes) throw new Error('Imported fonts exceed maxLoadedFontBytes.')
-        const path = install(`${loaded.size}${extname(face.path)}`, readFont(face))
-        bytes += face.size
+        const path = install(`${loaded.size}${extname(face.path)}`, readFontBytes ? readFont(face) : Buffer.alloc(0))
+        if (readFontBytes) bytes += face.size
         loaded.set(face.path, path)
         return path
       })

@@ -30,6 +30,7 @@ export const FONT_FALLBACKS: readonly (readonly string[])[] = [
 export interface ResolvedOptions {
   readonly backend: 'auto' | 'wasm' | 'native' | 'system'
   readonly diagnostics: boolean
+  readonly wasmWorkerIdleMs: number
   readonly fontMetadataCacheDirectory: string | false
   readonly maxFontMetadataCacheBytes: number
   readonly timeoutMs: number
@@ -52,7 +53,7 @@ const DEFAULT_LIMITS = {
   timeoutMs: 120_000, maxInputBytes: 64 * 1024 * 1024, maxOutputBytes: 128 * 1024 * 1024,
   maxImageResolution: 144, maxArchiveEntries: 20_000, maxUncompressedBytes: 512 * 1024 * 1024,
   maxFontFiles: 20_000, maxFontFileBytes: 256 * 1024 * 1024, maxLoadedFontBytes: 512 * 1024 * 1024,
-  maxFontResolutionEntries: 4096, maxFontMetadataCacheBytes: 32 * 1024 * 1024,
+  maxFontResolutionEntries: 4096, maxFontMetadataCacheBytes: 32 * 1024 * 1024, wasmWorkerIdleMs: 30_000,
 }
 
 const FONT_COLLECTION_NAMES = ['fontDirectories', 'initialFontFamilies'] as const
@@ -90,7 +91,7 @@ export function resolveOptions(input: ConverterOptions = {}): ResolvedOptions {
   if (callerOptions === null || typeof callerOptions !== 'object' || Array.isArray(callerOptions)) throw new TypeError('Converter options must be an object.')
   const merged: Record<string, unknown> = { ...DEFAULT_LIMITS, backend: 'auto', diagnostics: false, fontDirectories: systemFontDirectories(),
     fontFallbacks: FONT_FALLBACKS, initialFontFamilies: [], ...input }
-  for (const key of Object.keys(input)) if (!(key in DEFAULT_LIMITS) && !(FONT_COLLECTION_NAMES as readonly string[]).includes(key) && key !== 'fontFallbacks' && key !== 'fontMetadataCacheDirectory' && key !== 'backend' && key !== 'diagnostics') {
+  for (const key of Object.keys(input)) if (!(key in DEFAULT_LIMITS) && !(FONT_COLLECTION_NAMES as readonly string[]).includes(key) && key !== 'fontFallbacks' && key !== 'fontMetadataCacheDirectory' && key !== 'backend' && key !== 'diagnostics' && key !== 'wasmWorkerIdleMs') {
     throw new TypeError(`Unknown converter option: ${key}`)
   }
   const cacheDirectory = input.fontMetadataCacheDirectory === undefined ? defaultFontMetadataCacheDirectory() : input.fontMetadataCacheDirectory
@@ -98,9 +99,11 @@ export function resolveOptions(input: ConverterOptions = {}): ResolvedOptions {
     throw new TypeError('fontMetadataCacheDirectory must be an absolute path or false.')
   if (!['auto', 'wasm', 'native', 'system'].includes(merged.backend as string)) throw new TypeError('backend must be auto, wasm, native, or system.')
   if (typeof merged.diagnostics !== 'boolean') throw new TypeError('diagnostics must be a boolean.')
+  const wasmWorkerIdleMs = positiveSafeInteger(merged.wasmWorkerIdleMs, 'wasmWorkerIdleMs')
   return {
     backend: merged.backend as ResolvedOptions['backend'],
     diagnostics: merged.diagnostics,
+    wasmWorkerIdleMs,
     fontMetadataCacheDirectory: cacheDirectory,
     maxFontMetadataCacheBytes: positiveSafeInteger(merged.maxFontMetadataCacheBytes, 'maxFontMetadataCacheBytes'),
     timeoutMs: positiveSafeInteger(merged.timeoutMs, 'timeoutMs'),
