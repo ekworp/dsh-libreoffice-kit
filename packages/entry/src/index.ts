@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Worker } from 'node:worker_threads'
 import { resolveImageRender } from './image-operations.ts'
+import { inspectDocument } from './document.ts'
+import { createFontLoader, preloadFonts } from './font-loader.ts'
 import type { ImageRenderSpec, RenderImagesRequest, RenderImagesResult } from './image-operations.ts'
 export { IMAGE_FORMATS } from './image-operations.ts'
 export type { RenderImagesRequest, RenderImagesResult, RenderedImage } from './image-operations.ts'
@@ -345,6 +347,13 @@ function createConverterWith(resolvedOptions: ReturnType<typeof resolveOptions>,
       let bytes: Uint8Array
       let missingFonts: string[] = []
       if (engine.backend === 'system') {
+        const preflightStarted = performance.now()
+        const document = inspectDocument(sourceBytes, extension, resolvedOptions)
+        const loader = createFontLoader(resolvedOptions, document, () => '', fonts.faces, [...shared.fontCache.values()])
+        preloadFonts(loader, resolvedOptions, document, true)
+        missingFonts = loader.missingFonts
+        mergeCache(fonts.generation, loader.cacheEntries)
+        timings.fontScanMs = (timings.fontScanMs ?? 0) + performance.now() - preflightStarted
         const profile = join(scratch, 'profile')
         const path = join(scratch, `output.${format}`)
         const conversionStarted = performance.now()
