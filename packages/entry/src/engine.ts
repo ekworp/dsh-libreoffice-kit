@@ -7,6 +7,9 @@ import { dirname, isAbsolute, resolve, relative, sep, join } from 'node:path'
 
 const require = createRequire(import.meta.url)
 
+/** Resolve an engine package manifest from a custom application installation. */
+export type EnginePackageResolver = (name: string) => string
+
 /** Node API release version returned by runtime discovery. */
 export const ENGINE_VERSION = '0.1.3'
 

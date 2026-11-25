@@ -23,7 +23,8 @@ export type { ConversionRequest } from './operations.ts'
 export { discoverRuntime } from './runtime.ts'
 export type { RuntimeInfo } from './runtime.ts'
 import { resolveSystemEngine } from './engine.ts'
-import type { Engine, NativeEngine } from './engine.ts'
+import type { Engine, EnginePackageResolver, NativeEngine } from './engine.ts'
+export type { EnginePackageResolver } from './engine.ts'
 import { runSystem } from './system.ts'
 import { FontSnapshotState } from './font-snapshot-state.ts'
 import { validateFontSnapshot } from './font-snapshot-validation.ts'
@@ -36,6 +37,8 @@ export { ENGINE_VERSION, ENGINE_VERSIONS } from './engine.ts'
 
 /** Host limits used by both native and Node WASM conversions. All byte limits are positive safe integers. */
 export interface ConverterOptions {
+  /** Engine package manifest resolver. Defaults to Node resolution from this package. */
+  resolveEnginePackage?: EnginePackageResolver
   /** Engine selection. `auto` preserves platform package resolution; `system` explicitly uses host soffice on Linux. */
   backend?: 'auto' | 'wasm' | 'native' | 'system'
   /** Include per-stage performance timings in each render result. */
@@ -296,7 +299,7 @@ async function resolveConverter(options?: ConverterOptions): Promise<{
   let engine: Engine
   try {
     if (resolvedOptions.backend === 'system') engine = await resolveSystemEngine()
-    else engine = await resolveEngine()
+    else engine = await resolveEngine(options?.resolveEnginePackage)
     if (resolvedOptions.backend !== 'auto' && resolvedOptions.backend !== engine.backend)
       throw new Error(`Requested ${resolvedOptions.backend} backend is unavailable on this host.`)
   } catch (cause) { throw new ConversionError('unavailable', (cause as Error).message, { cause }) }

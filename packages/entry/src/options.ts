@@ -91,7 +91,7 @@ export function resolveOptions(input: ConverterOptions = {}): ResolvedOptions {
   if (callerOptions === null || typeof callerOptions !== 'object' || Array.isArray(callerOptions)) throw new TypeError('Converter options must be an object.')
   const merged: Record<string, unknown> = { ...DEFAULT_LIMITS, backend: 'auto', diagnostics: false, fontDirectories: systemFontDirectories(),
     fontFallbacks: FONT_FALLBACKS, initialFontFamilies: [], ...input }
-  for (const key of Object.keys(input)) if (!(key in DEFAULT_LIMITS) && !(FONT_COLLECTION_NAMES as readonly string[]).includes(key) && key !== 'fontFallbacks' && key !== 'fontMetadataCacheDirectory' && key !== 'backend' && key !== 'diagnostics' && key !== 'wasmWorkerIdleMs') {
+  for (const key of Object.keys(input)) if (!(key in DEFAULT_LIMITS) && !(FONT_COLLECTION_NAMES as readonly string[]).includes(key) && key !== 'fontFallbacks' && key !== 'fontMetadataCacheDirectory' && key !== 'backend' && key !== 'diagnostics' && key !== 'wasmWorkerIdleMs' && key !== 'resolveEnginePackage') {
     throw new TypeError(`Unknown converter option: ${key}`)
   }
   const cacheDirectory = input.fontMetadataCacheDirectory === undefined ? defaultFontMetadataCacheDirectory() : input.fontMetadataCacheDirectory

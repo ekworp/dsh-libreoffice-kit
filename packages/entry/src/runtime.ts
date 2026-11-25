@@ -1,12 +1,13 @@
 /** Offline discovery of the installed engine and public entry points. */
 import { fileURLToPath } from 'node:url'
 import { ENGINE_VERSION, resolveEngine } from './engine.ts'
+import type { EnginePackageResolver } from './engine.ts'
 import { ConversionError } from './errors.ts'
 
 /** Paths use the same installed Node API and precompiled engine as createConverter. */
 export interface RuntimeInfo {
   readonly version: string
-  readonly backend: 'native' | 'wasm'
+  readonly backend: 'native' | 'wasm' | 'system'
   readonly cliPath: string
   readonly nodeApiPath: string
 }
@@ -16,9 +17,9 @@ export interface RuntimeInfo {
  * @returns Public entry paths, Node API version, and selected backend.
  * @throws ConversionError when the installed engine is unavailable or invalid.
  */
-export async function discoverRuntime(): Promise<RuntimeInfo> {
+export async function discoverRuntime(options: { readonly resolveEnginePackage?: EnginePackageResolver } = {}): Promise<RuntimeInfo> {
   try {
-    const engine = await resolveEngine()
+    const engine = await resolveEngine(options.resolveEnginePackage)
     return { version: ENGINE_VERSION, backend: engine.backend,
       cliPath: fileURLToPath(new URL('./cli.js', import.meta.url)),
       nodeApiPath: fileURLToPath(new URL('./index.js', import.meta.url)) }
