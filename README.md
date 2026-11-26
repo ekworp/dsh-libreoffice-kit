@@ -2,7 +2,7 @@
 description: "Font-friendly Office-to-PDF conversion in Node.js, with prebuilt LibreOffice engines."
 kind: "package-library"
 ---
-# @deepseek-ai/libreoffice-kit
+# @ekworp/libreoffice-kit
 
 English | [中文](README.zh.md)
 
@@ -18,10 +18,10 @@ Binary `.doc`, `.xls`, and `.ppt` support covers OLE compound documents such as 
 
 ## Quick start
 
-Requires Node.js **22.19.0 or newer**. Install the `0.1.3` package with its optional engines:
+Requires Node.js **22.19.0 or newer**. Install the `0.2.4` package with its optional engines:
 
 ```sh
-npm install @deepseek-ai/libreoffice-kit@0.1.3
+npm install @ekworp/libreoffice-kit@0.2.4
 ```
 
 The package installs the `dsoffice` command. From a local installation:
@@ -33,7 +33,7 @@ npm exec -- dsoffice recalculate --input budget.xlsx --output recalculated.xlsx
 ```
 
 ```js
-import { createConverter } from '@deepseek-ai/libreoffice-kit';
+import { createConverter } from '@ekworp/libreoffice-kit';
 
 const converter = await createConverter({
   timeoutMs: 120_000,

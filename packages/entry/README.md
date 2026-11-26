@@ -1,4 +1,4 @@
-# @deepseek-ai/libreoffice-kit
+# @ekworp/libreoffice-kit
 
 English | [中文](README.zh.md)
 
@@ -6,20 +6,20 @@ Convert, recalculate, and directly render local Office documents with prebuilt L
 
 Binary `.doc`, `.xls`, and `.ppt` inputs must be OLE compound documents, such as Office 97–2003 files. Renamed RTF/HTML and `.wps` inputs are unsupported. `missingFonts` is empty for binary inputs because their font tables are interpreted by LibreOffice rather than the OOXML inspector.
 
-The Node API version is independent of its platform engine versions. Version 0.1.3 uses macOS, Windows and WASM engines 0.1.3. `ENGINE_VERSION` and `discoverRuntime().version` identify the Node API; `ENGINE_VERSIONS` lists the exact compatible engine versions.
+The Node API version is independent of its platform engine versions. Version 0.2.4 uses macOS, Windows and WASM engines 0.1.3/0.1.5. `ENGINE_VERSION` and `discoverRuntime().version` identify the Node API; `ENGINE_VERSIONS` lists the exact compatible engine versions.
 
 ## Installation and usage
 
 Install with Node.js 22.19.0 or newer:
 
 ```sh
-npm install @deepseek-ai/libreoffice-kit@0.1.3
+npm install @ekworp/libreoffice-kit@0.2.4
 ```
 
 npm installs the matching native engine on macOS/Windows ARM64 or x64, and the shared WASM engine on Linux. macOS and Windows require their native package; a missing or invalid package rejects `createConverter` with `unavailable`, without switching to WASM. Linux uses WASM unless a compatible development native package was installed explicitly. Conversion failures never switch engines.
 
 ```js
-import { createConverter } from '@deepseek-ai/libreoffice-kit';
+import { createConverter } from '@ekworp/libreoffice-kit';
 
 const converter = await createConverter({ timeoutMs: 120_000 });
 try {
