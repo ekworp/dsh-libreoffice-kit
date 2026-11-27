@@ -72,7 +72,7 @@ pnpm run build
 pnpm run start:web -- --no-open
 ```
 
-The override applies only when DSH is started from that checkout. It does not affect `pnpm dlx @deepseek-ai/dsh web`; use the checkout's `start:web` command or update your launcher to run it.
+The override applies only when DSH is started from that checkout. It does not affect `pnpm dlx @deepseek-ai/dsh web`; use the checkout's `start:web` command or update your launcher to run it. Set `LIBREOFFICE_KIT_BACKEND=system` in that launcher environment to make DSH use the host `soffice` backend without changing DSH source.
 
 ## What “font-friendly” means in 0.1.0
 

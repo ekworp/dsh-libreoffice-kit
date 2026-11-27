@@ -57,6 +57,12 @@ const DEFAULT_LIMITS = {
 }
 
 const FONT_COLLECTION_NAMES = ['fontDirectories', 'initialFontFamilies'] as const
+const BACKEND_ENVIRONMENT = 'LIBREOFFICE_KIT_BACKEND'
+
+function defaultBackend(): 'auto' | 'wasm' | 'native' | 'system' {
+  const value = process.env[BACKEND_ENVIRONMENT]
+  return value === undefined ? 'auto' : value as 'auto' | 'wasm' | 'native' | 'system'
+}
 
 function positiveSafeInteger(value: unknown, name: string): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1) throw new RangeError(`${name} must be a positive safe integer.`)
@@ -89,7 +95,7 @@ function fontGroups(value: unknown): string[][] {
 export function resolveOptions(input: ConverterOptions = {}): ResolvedOptions {
   const callerOptions: unknown = input
   if (callerOptions === null || typeof callerOptions !== 'object' || Array.isArray(callerOptions)) throw new TypeError('Converter options must be an object.')
-  const merged: Record<string, unknown> = { ...DEFAULT_LIMITS, backend: 'auto', diagnostics: false, fontDirectories: systemFontDirectories(),
+  const merged: Record<string, unknown> = { ...DEFAULT_LIMITS, backend: defaultBackend(), diagnostics: false, fontDirectories: systemFontDirectories(),
     fontFallbacks: FONT_FALLBACKS, initialFontFamilies: [], ...input }
   for (const key of Object.keys(input)) if (!(key in DEFAULT_LIMITS) && !(FONT_COLLECTION_NAMES as readonly string[]).includes(key) && key !== 'fontFallbacks' && key !== 'fontMetadataCacheDirectory' && key !== 'backend' && key !== 'diagnostics' && key !== 'wasmWorkerIdleMs' && key !== 'resolveEnginePackage') {
     throw new TypeError(`Unknown converter option: ${key}`)

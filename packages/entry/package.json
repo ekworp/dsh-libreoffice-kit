@@ -1,7 +1,7 @@
 {
   "name": "@ekworp/libreoffice-kit",
   "description": "Convert, recalculate, and render Office documents with prebuilt LibreOffice",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "publishConfig": {
     "access": "public"
   },

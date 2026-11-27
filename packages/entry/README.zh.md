@@ -20,6 +20,8 @@ npm 在 macOS/Windows ARM64 或 x64 上安装匹配的原生引擎，Windows 上
 
 在 Linux 上安装共享 WASM 引擎。macOS 和 Windows 必须具有对应原生包；包缺失或无效时，`createConverter` 以 `unavailable` 拒绝，不会切换到 WASM。Linux 使用 WASM，除非显式安装了兼容的原生开发包。转换失败不会切换引擎。
 
+如果调用方没有显式传入 `backend`，可设置 `LIBREOFFICE_KIT_BACKEND=system` 使用系统 `soffice` 引擎；显式传入的选项优先级更高。
+
 ### 覆盖 DSH 的 LibreOffice Kit
 
 如果使用 DSH 源码 checkout，请在根目录的 `pnpm-workspace.yaml` 中加入：

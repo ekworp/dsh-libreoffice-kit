@@ -71,6 +71,13 @@ describe('engine discovery', () => {
     expect(platformTarget('linux', 'riscv64')).toBeUndefined()
   })
 
+  it('supports an environment backend default while explicit options win', async () => {
+    vi.stubEnv('LIBREOFFICE_KIT_BACKEND', 'system')
+    expect(resolveOptions().backend).toBe('system')
+    expect(resolveOptions({ backend: 'wasm' }).backend).toBe('wasm')
+    vi.unstubAllEnvs()
+  })
+
   it('validates explicit backend selection and discovers host soffice on Linux', async () => {
     expect(resolveOptions({ backend: 'system' }).backend).toBe('system')
     expect(() => resolveOptions({ backend: 'bogus' as never })).toThrow(/backend/)

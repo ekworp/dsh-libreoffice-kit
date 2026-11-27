@@ -70,7 +70,7 @@ pnpm run build
 pnpm run start:web -- --no-open
 ```
 
-此 override 只对从该源码 checkout 启动的 DSH 生效，不会影响 `pnpm dlx @deepseek-ai/dsh web`。如果使用 launcher，需要将其改为运行该 checkout 的 `start:web`。
+此 override 只对从该源码 checkout 启动的 DSH 生效，不会影响 `pnpm dlx @deepseek-ai/dsh web`。如果使用 launcher，需要将其改为运行该 checkout 的 `start:web`，并在 launcher 环境中设置 `LIBREOFFICE_KIT_BACKEND=system`，即可不修改 DSH 源码而使用系统 `soffice` 引擎。
 
 ## 0.1.0 的“字体友好”具体指什么
 
