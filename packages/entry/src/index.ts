@@ -301,7 +301,10 @@ async function resolveConverter(options?: ConverterOptions): Promise<{
   let engine: Engine
   try {
     if (resolvedOptions.backend === 'system') engine = await resolveSystemEngine()
-    else engine = await resolveEngine(options?.resolveEnginePackage)
+    else if (resolvedOptions.backend === 'auto') {
+      try { engine = await resolveSystemEngine() }
+      catch { engine = await resolveEngine(options?.resolveEnginePackage) }
+    } else engine = await resolveEngine(options?.resolveEnginePackage)
     if (resolvedOptions.backend !== 'auto' && resolvedOptions.backend !== engine.backend)
       throw new Error(`Requested ${resolvedOptions.backend} backend is unavailable on this host.`)
   } catch (cause) { throw new ConversionError('unavailable', (cause as Error).message, { cause }) }

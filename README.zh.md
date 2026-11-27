@@ -53,6 +53,17 @@ try {
 
 路径必须是绝对路径，目录由调用方私有管理，输出文件必须尚不存在。PDF 写入 `outputPath`，`render` 返回所选引擎、页数和缺失字体名称。每次转换使用独立的原生进程或 Node Worker 及私有配置；同一转换器串行执行，取消和释放会等待引擎退出与清理完成。取消、错误和资源限制见 [Node API](packages/entry/README.zh.md)。
 
+## Backend 性能参考
+
+以下数据来自当前 ARM64 Linux 设备、LibreOffice 24.2，以及项目使用的 13 页 PPTX 示例：
+
+| Backend | 转换耗时 | 转换后 RSS | 说明 |
+| --- | ---: | ---: | --- |
+| `system` | 10–13 秒 | 约 120 MiB | 使用系统 `/usr/bin/soffice`；设备支持时推荐使用。 |
+| `wasm` | 约 57 秒 | 约 1.6 GiB | 便携回退方案；Worker 长驻会保留较多 WASM 内存。 |
+
+以上是设备和文档相关的参考值，不构成性能保证。`auto` 在检测到可用系统 `soffice` 时优先使用 `system`，否则回退到打包引擎；传入 `backend: 'wasm'` 可强制使用 WASM。
+
 ## 覆盖 DSH 的 LibreOffice Kit
 
 如果要让 DSH 源码 checkout 使用本包，而不是官方包，请在 DSH 根目录的 `pnpm-workspace.yaml` 中加入：

@@ -56,6 +56,17 @@ For a long-lived service that wants one explicit lifecycle owner for concurrent 
 
 `convert()` exports the format named by the output suffix, `recalculate()` refreshes spreadsheet formula results before saving, and `renderImages()` writes a fresh directory containing PNG tiles plus `manifest.json`. Office images are painted directly from one loaded model; PDF images use PDFium. The CLI exposes the same operations through `dsoffice capabilities|convert|recalculate|render`.
 
+### Backend performance reference
+
+Measured on an ARM64 Linux device with LibreOffice 24.2 and the project's 13-page PPTX sample:
+
+| Backend | Conversion time | Peak RSS after conversion | Notes |
+| --- | ---: | ---: | --- |
+| `system` | 10–13 seconds | about 120 MiB | Uses host `/usr/bin/soffice`; recommended when available. |
+| `wasm` | about 57 seconds | about 1.6 GiB | Portable fallback; a warm Worker retains substantial WASM memory. |
+
+These are device- and document-dependent reference values. `auto` prefers `system` when a usable host `soffice` is available and falls back to the packaged engine; pass `backend: 'wasm'` to force WASM.
+
 ```sh
 npm exec -- dsoffice render --input report.docx --output-dir report-pages --pages 1
 npm exec -- dsoffice render --input budget.xlsx --output-dir budget-preview --sheet Summary --range A1:D20

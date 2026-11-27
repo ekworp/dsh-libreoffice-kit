@@ -58,6 +58,17 @@ try {
 
 `convert()` 按输出后缀导出格式，`recalculate()` 在保存前刷新电子表格公式结果，`renderImages()` 在全新目录中写入 PNG tile 和 `manifest.json`。Office 图像直接从一次加载的模型绘制，PDF 使用 PDFium。CLI 通过 `dsoffice capabilities|convert|recalculate|render` 提供相同行为。
 
+### Backend 性能参考
+
+以下数据来自当前 ARM64 Linux 设备、LibreOffice 24.2，以及项目使用的 13 页 PPTX 示例：
+
+| Backend | 转换耗时 | 转换后 RSS | 说明 |
+| --- | ---: | ---: | --- |
+| `system` | 10–13 秒 | 约 120 MiB | 使用系统 `/usr/bin/soffice`；设备支持时推荐使用。 |
+| `wasm` | 约 57 秒 | 约 1.6 GiB | 便携回退方案；Worker 长驻会保留较多 WASM 内存。 |
+
+以上是设备和文档相关的参考值。`auto` 在检测到可用系统 `soffice` 时优先使用 `system`，否则回退到打包引擎；传入 `backend: 'wasm'` 可强制使用 WASM。
+
 ```sh
 npm exec -- dsoffice render --input report.docx --output-dir report-pages --pages 1
 npm exec -- dsoffice render --input budget.xlsx --output-dir budget-preview --sheet Summary --range A1:D20

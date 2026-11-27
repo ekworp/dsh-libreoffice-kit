@@ -141,7 +141,7 @@ const wasmWritesPdf = `module.exports = async function factory(overrides) {
  */
 async function converterFor(engine: Engine, options: ConverterOptions = {}): Promise<Converter> {
   vi.mocked(resolveEngine).mockResolvedValue(engine)
-  return await createConverter({ timeoutMs: 30_000, fontDirectories: [], ...options })
+  return await createConverter({ timeoutMs: 30_000, fontDirectories: [], backend: options.backend ?? engine.backend, ...options })
 }
 
 describe('createConverter', () => {
@@ -301,7 +301,7 @@ describe('createConverter', () => {
 it('shares the converter queue and exclusive output handling with conversion and recalculation', async () => {
   const { root, inputPath } = await conversionFixture()
   vi.mocked(resolveEngine).mockResolvedValue(await nativeEngine(root, `const fs = require('node:fs'); fs.writeFileSync(value('--output-path'), value('--format') === 'txt' ? 'Exported text' : Buffer.from([0x50, 0x4b, 3, 4])); console.log(JSON.stringify({ok:true}));`))
-  const converter = await createConverter({ fontDirectories: [] })
+  const converter = await createConverter({ backend: 'native', fontDirectories: [] })
   try {
     const outputPath = join(root, 'converted.txt')
     await converter.convert({ inputPath, outputPath })

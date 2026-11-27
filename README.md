@@ -55,6 +55,17 @@ Supply absolute paths in caller-owned private directories; the output must not a
 
 On Linux, `backend: 'auto'` remains the packaged WASM path. `backend: 'system'` is an explicit, opt-in host `soffice` path selected from `LIBREOFFICE_SOFFICE`, `/usr/bin/soffice`, `/usr/local/bin/soffice`, or `PATH`; it uses a unique private profile per conversion, bounded output validation, and process-group cancellation. It is not an automatic fallback, and callers must qualify the installed LibreOffice against their documents. Set `diagnostics: true` to receive stage timings in `RenderResult.timings` (engine discovery, input read, font scan, worker/system conversion, WASM startup, conversion, PDF read, and output write). Explicit WASM conversions can keep their Worker warm with `wasmWorkerIdleMs` (default 30 seconds); the Worker is terminated after that idle period or when the converter is disposed.
 
+## Backend performance reference
+
+Measured on an ARM64 Linux device with LibreOffice 24.2 and the sample 13-page PPTX used by this project:
+
+| Backend | Conversion time | Peak RSS after conversion | Notes |
+| --- | ---: | ---: | --- |
+| `system` | 10–13 seconds | about 120 MiB | Uses the host `/usr/bin/soffice`; recommended when available. |
+| `wasm` | about 57 seconds | about 1.6 GiB | Portable fallback; a warm Worker retains substantial WASM memory. |
+
+These are device- and document-dependent reference values, not guarantees. `auto` prefers `system` when a usable host `soffice` is available and falls back to the packaged engine; pass `backend: 'wasm'` to force WASM.
+
 ## Override DSH's LibreOffice Kit
 
 To make a DSH source checkout use this package instead of the official package, add the override below to the root `pnpm-workspace.yaml`:

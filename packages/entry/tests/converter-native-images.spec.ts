@@ -44,7 +44,7 @@ it('passes native font selection and source bytes to direct rendering', async ()
     inputPath: request.operation.inputPath, sourceSha256: '0'.repeat(64), dpi: request.operation.dpi,
     pageCount: 1, images: [], missingFonts: request.missingFonts,
   }))
-  const converter = await createConverter({ fontDirectories: [] })
+  const converter = await createConverter({ backend: 'native', fontDirectories: [] })
   try {
     await expect(converter.renderImages({ inputPath, outputDir })).resolves.toMatchObject({
       backend: 'native', missingFonts: ['Missing'],

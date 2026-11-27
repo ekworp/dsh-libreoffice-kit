@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     include: ['packages/entry/tests/**/*.spec.ts'],
     pool: 'forks',
+    setupFiles: ['./packages/entry/tests/setup.ts'],
     coverage: { provider: 'v8', include: ['packages/entry/src/**/*.ts'],
       // Worker entry and the native raster child-process owner settle in separate processes;
       // installed-engine qualification covers their full transport and teardown paths.
