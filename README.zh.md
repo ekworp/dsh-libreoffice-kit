@@ -18,10 +18,10 @@ API 支持 Office 导出与重算，以及 Office/PDF 输入的直接 PNG 渲染
 
 ## 快速开始
 
-需要 **Node.js 22.19.0 或更新版本**。安装 `0.2.4` 及其可选引擎依赖：
+需要 **Node.js 22.19.0 或更新版本**。安装 `0.2.5` 及其可选引擎依赖：
 
 ```sh
-npm install @ekworp/libreoffice-kit@0.2.4
+npm install @ekworp/libreoffice-kit
 ```
 
 此包安装 `dsoffice` 命令。使用本地安装的命令：
@@ -51,7 +51,26 @@ try {
 }
 ```
 
-路径必须是绝对路径，目录由调用方私有管理，输出文件必须尚不存在。PDF 写入 `outputPath`，`render` 返回所选引擎和缺失字体名称。每次转换使用独立的原生进程或 Node Worker 及私有配置；同一转换器串行执行，取消和释放会等待引擎退出与清理完成。取消、错误和资源限制见 [Node API](packages/entry/README.zh.md)。
+路径必须是绝对路径，目录由调用方私有管理，输出文件必须尚不存在。PDF 写入 `outputPath`，`render` 返回所选引擎、页数和缺失字体名称。每次转换使用独立的原生进程或 Node Worker 及私有配置；同一转换器串行执行，取消和释放会等待引擎退出与清理完成。取消、错误和资源限制见 [Node API](packages/entry/README.zh.md)。
+
+## 覆盖 DSH 的 LibreOffice Kit
+
+如果要让 DSH 源码 checkout 使用本包，而不是官方包，请在 DSH 根目录的 `pnpm-workspace.yaml` 中加入：
+
+```yaml
+overrides:
+  '@deepseek-ai/libreoffice-kit': 'npm:@ekworp/libreoffice-kit'
+```
+
+然后在 DSH 源码目录执行：
+
+```sh
+pnpm install
+pnpm run build
+pnpm run start:web -- --no-open
+```
+
+此 override 只对从该源码 checkout 启动的 DSH 生效，不会影响 `pnpm dlx @deepseek-ai/dsh web`。如果使用 launcher，需要将其改为运行该 checkout 的 `start:web`。
 
 ## 0.1.0 的“字体友好”具体指什么
 

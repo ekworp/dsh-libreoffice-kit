@@ -6,19 +6,30 @@
 
 二进制 `.doc`、`.xls`、`.ppt` 输入必须是 OLE 复合文档，例如 Office 97–2003 文件。不支持改后缀的 RTF/HTML 和 `.wps`。二进制输入的 `missingFonts` 为空，因为其字体表由 LibreOffice 读取，而不是由 OOXML 检查器读取。
 
-Node API 与各平台引擎独立指定版本。0.2.4 使用 macOS、Windows 引擎 0.1.3 和 WASM 引擎 0.1.5。`ENGINE_VERSION` 和 `discoverRuntime().version` 表示 Node API 版本；`ENGINE_VERSIONS` 列出各平台兼容的精确引擎版本。
+Node API 与各平台引擎独立指定版本。0.2.5 使用 macOS、Windows 引擎 0.1.3 和 WASM 引擎 0.1.5。`ENGINE_VERSION` 和 `discoverRuntime().version` 表示 Node API 版本；`ENGINE_VERSIONS` 列出各平台兼容的精确引擎版本。
 
 ## 安装与使用
 
 使用 Node.js 22.19.0 或更新版本安装：
 
 ```sh
-npm install @ekworp/libreoffice-kit@0.2.4
+npm install @ekworp/libreoffice-kit
 ```
 
 npm 在 macOS/Windows ARM64 或 x64 上安装匹配的原生引擎，Windows 上，引擎可执行文件或程序目录路径达到 260 个字符时，在私有操作目录中使用 helper 临时副本和指向已安装资源的 junction。资源保留在安装目录，junction 在 helper 关闭后清理。渲染器若在返回协议响应前退出，会携带退出状态和捕获的诊断信息拒绝操作。
 
 在 Linux 上安装共享 WASM 引擎。macOS 和 Windows 必须具有对应原生包；包缺失或无效时，`createConverter` 以 `unavailable` 拒绝，不会切换到 WASM。Linux 使用 WASM，除非显式安装了兼容的原生开发包。转换失败不会切换引擎。
+
+### 覆盖 DSH 的 LibreOffice Kit
+
+如果使用 DSH 源码 checkout，请在根目录的 `pnpm-workspace.yaml` 中加入：
+
+```yaml
+overrides:
+  '@deepseek-ai/libreoffice-kit': 'npm:@ekworp/libreoffice-kit'
+```
+
+然后执行 `pnpm install`、`pnpm run build`，并使用 `pnpm run start:web -- --no-open` 启动 DSH。此 override 不会影响 `pnpm dlx @deepseek-ai/dsh web`；launcher 必须运行该源码 checkout。
 
 ```js
 import { createConverter } from '@ekworp/libreoffice-kit';

@@ -18,10 +18,10 @@ Binary `.doc`, `.xls`, and `.ppt` support covers OLE compound documents such as 
 
 ## Quick start
 
-Requires Node.js **22.19.0 or newer**. Install the `0.2.4` package with its optional engines:
+Requires Node.js **22.19.0 or newer**. Install the `0.2.5` package with its optional engines:
 
 ```sh
-npm install @ekworp/libreoffice-kit@0.2.4
+npm install @ekworp/libreoffice-kit
 ```
 
 The package installs the `dsoffice` command. From a local installation:
@@ -51,9 +51,28 @@ try {
 }
 ```
 
-Supply absolute paths in caller-owned private directories; the output must not already exist. The PDF is written to `outputPath`, and `render` returns the selected backend and missing-font names. Each render owns a fresh native process or Node worker and private profile. Renders on one converter are serialized; cancellation and disposal wait for engine exit and cleanup. See the [Node API](packages/entry/README.md) for cancellation, errors, and resource limits.
+Supply absolute paths in caller-owned private directories; the output must not already exist. The PDF is written to `outputPath`, and `render` returns the selected backend, detected page count, and missing-font names. Each render owns a fresh native process or Node worker and private profile. Renders on one converter are serialized; cancellation and disposal wait for engine exit and cleanup. See the [Node API](packages/entry/README.md) for cancellation, errors, and resource limits.
 
 On Linux, `backend: 'auto'` remains the packaged WASM path. `backend: 'system'` is an explicit, opt-in host `soffice` path selected from `LIBREOFFICE_SOFFICE`, `/usr/bin/soffice`, `/usr/local/bin/soffice`, or `PATH`; it uses a unique private profile per conversion, bounded output validation, and process-group cancellation. It is not an automatic fallback, and callers must qualify the installed LibreOffice against their documents. Set `diagnostics: true` to receive stage timings in `RenderResult.timings` (engine discovery, input read, font scan, worker/system conversion, WASM startup, conversion, PDF read, and output write). Explicit WASM conversions can keep their Worker warm with `wasmWorkerIdleMs` (default 30 seconds); the Worker is terminated after that idle period or when the converter is disposed.
+
+## Override DSH's LibreOffice Kit
+
+To make a DSH source checkout use this package instead of the official package, add the override below to the root `pnpm-workspace.yaml`:
+
+```yaml
+overrides:
+  '@deepseek-ai/libreoffice-kit': 'npm:@ekworp/libreoffice-kit'
+```
+
+Then install and build from the DSH checkout:
+
+```sh
+pnpm install
+pnpm run build
+pnpm run start:web -- --no-open
+```
+
+The override applies only when DSH is started from that checkout. It does not affect `pnpm dlx @deepseek-ai/dsh web`; use the checkout's `start:web` command or update your launcher to run it.
 
 ## What “font-friendly” means in 0.1.0
 

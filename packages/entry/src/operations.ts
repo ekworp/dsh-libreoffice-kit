@@ -52,6 +52,17 @@ export function resolveConversion(request: ConversionRequest, operation: 'render
 }
 
 /**
+ * Count page dictionaries in a generated PDF.
+ * LibreOffice emits uncompressed page objects for its normal exports; the
+ * conservative undefined result keeps callers safe for unusual PDFs.
+ */
+export function pdfPageCount(bytes: Uint8Array): number | undefined {
+  const text = new TextDecoder('latin1').decode(bytes)
+  const count = text.match(/\/Type\s*\/Page(?:\b|[\/>])/g)?.length ?? 0
+  return count > 0 ? count : undefined
+}
+
+/**
  * Reject an engine output with an incorrect container signature.
  * @param bytes - Complete bounded output.
  * @param format - Requested output suffix.

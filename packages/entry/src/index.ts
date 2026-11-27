@@ -16,7 +16,7 @@ import { renderImagesWithNative } from './native-image-renderer.ts'
 import { resolveOptions } from './options.ts'
 import { resolveEngine } from './engine.ts'
 import { ConversionError, failureCode } from './errors.ts'
-import { resolveConversion, validateOutput } from './operations.ts'
+import { pdfPageCount, resolveConversion, validateOutput } from './operations.ts'
 import type { ConversionRequest, ConversionSpec } from './operations.ts'
 export { CONVERSION_FORMATS } from './operations.ts'
 export type { ConversionRequest } from './operations.ts'
@@ -93,6 +93,8 @@ export interface RenderTimings {
 
 export interface RenderResult {
   readonly backend: 'native' | 'wasm' | 'system'
+  /** Number of pages in PDF output when the generated PDF exposes page dictionaries. */
+  readonly pageCount?: number
   readonly timings?: RenderTimings
   /** Declared OOXML families no installed font provides; binary formats return an empty list. */
   readonly missingFonts: string[]
@@ -425,7 +427,9 @@ function createConverterWith(resolvedOptions: ReturnType<typeof resolveOptions>,
       timings.outputWriteMs = performance.now() - outputWriteStarted
       stopped.throwIfAborted()
       succeeded = true
-      return { backend: engine.backend, missingFonts, ...(resolvedOptions.diagnostics ? { timings } : {}) }
+      const pageCount = format === 'pdf' ? pdfPageCount(bytes) : undefined
+      return { backend: engine.backend, ...(pageCount === undefined ? {} : { pageCount }), missingFonts,
+        ...(resolvedOptions.diagnostics ? { timings } : {}) }
     } catch (error) {
       failure = error
       throw error

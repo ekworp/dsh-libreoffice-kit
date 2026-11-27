@@ -2,7 +2,7 @@
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
-import { CONVERSION_FORMATS, resolveConversion, validateOutput } from '../src/operations.ts'
+import { CONVERSION_FORMATS, pdfPageCount, resolveConversion, validateOutput } from '../src/operations.ts'
 import type { ConversionRequest } from '../src/operations.ts'
 
 const path = (name: string) => join(tmpdir(), name)
@@ -37,6 +37,11 @@ describe('document operations', () => {
     for (const sheet of ['', ' ', 'a\0', 2])
       expect(() => resolveConversion({ ...request('xlsx', 'csv'), sheet } as ConversionRequest, 'convert')).toThrow(/sheet must/)
     expect(() => resolveConversion({ ...request('xlsx', 'pdf'), sheet: 'Sheet1' }, 'convert')).toThrow(/only for CSV/)
+  })
+  it('counts PDF page dictionaries without counting the Pages tree', () => {
+    const pdf = new TextEncoder().encode('%PDF-1.7\n/Type /Pages /Count 2\n/Type /Page\n/Type /Page\n')
+    expect(pdfPageCount(pdf)).toBe(2)
+    expect(pdfPageCount(new TextEncoder().encode('%PDF-1.7\n'))).toBeUndefined()
   })
   it('checks binary signatures while accepting empty text exports', () => {
     validateOutput(new TextEncoder().encode('%PDF-1.7'), 'pdf')
